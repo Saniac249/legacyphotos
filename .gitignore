@@ -1,0 +1,13 @@
+cat > .gitignore <<'EOF'
+.venv/
+.build/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Local recovery/output data
+iPhone4S-Originals/
+iPhone4S-Mutations/
+iPhone4S-Recovered/
+*_diff.jpg
+EOF
