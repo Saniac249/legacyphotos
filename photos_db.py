@@ -258,3 +258,76 @@ def camera_library_summary(
         "adjusted": row[1] or 0,
         "unadjusted": row[2] or 0,
     }
+
+def camera_assets(
+    snapshot_path,
+):
+    connection = sqlite3.connect(
+        str(snapshot_path)
+    )
+
+    connection.row_factory = sqlite3.Row
+
+    try:
+        rows = connection.execute(
+            """
+            SELECT
+                g.Z_PK AS asset_pk,
+                g.ZUUID AS uuid,
+                g.ZDIRECTORY AS directory,
+                g.ZFILENAME AS filename,
+                g.ZDATECREATED AS date_created,
+                g.ZADDEDDATE AS date_added,
+                g.ZADJUSTMENTTIMESTAMP
+                    AS adjustment_timestamp,
+                g.ZHASADJUSTMENTS
+                    AS has_adjustments,
+                g.ZKIND AS kind,
+                g.ZKINDSUBTYPE AS kind_subtype,
+
+                a.ZORIGINALFILENAME
+                    AS original_filename,
+                a.ZORIGINALWIDTH
+                    AS original_width,
+                a.ZORIGINALHEIGHT
+                    AS original_height,
+                a.ZORIGINALORIENTATION
+                    AS original_orientation,
+                a.ZORIGINALFILESIZE
+                    AS original_file_size,
+                a.ZEDITORBUNDLEID
+                    AS editor_bundle_id
+
+            FROM ZGENERICASSET AS g
+
+            LEFT JOIN
+                ZADDITIONALASSETATTRIBUTES AS a
+
+                ON a.Z_PK =
+                   g.ZADDITIONALATTRIBUTES
+
+            WHERE
+                g.ZTRASHEDDATE IS NULL
+                AND g.ZKIND = 0
+                AND g.ZDIRECTORY LIKE 'DCIM/%'
+                AND UPPER(g.ZFILENAME)
+                    LIKE '%.JPG'
+
+            ORDER BY
+                g.ZDATECREATED ASC
+            """
+        ).fetchall()
+
+    except sqlite3.Error as exc:
+        raise PhotosDatabaseError(
+            "Unable to read camera assets: "
+            f"{exc}"
+        )
+
+    finally:
+        connection.close()
+
+    return [
+        dict(row)
+        for row in rows
+    ]

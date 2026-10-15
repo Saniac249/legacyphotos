@@ -14,8 +14,15 @@ from device import (
 
 from photos_db import (
     PhotosDatabaseError,
+    camera_assets,
     camera_library_summary,
     prepare_snapshot,
+)
+
+from incremental_import import (
+    DEFAULT_HISTORY,
+    imported_uuids,
+    open_history,
 )
 
 
@@ -162,6 +169,158 @@ def scan_command():
 
     return 0
 
+def sync_command():
+    device = get_supported_device()
+
+    if device is None:
+        return 1
+
+    try:
+        with console.status(
+            "[bold]Checking iPhone 4S..."
+        ):
+            snapshot, _ = prepare_snapshot()
+
+            assets = camera_assets(
+                snapshot
+            )
+
+            history = open_history(
+                DEFAULT_HISTORY
+            )
+
+            known = imported_uuids(
+                history
+            )
+
+    except PhotosDatabaseError as exc:
+        console.print()
+        console.print(
+            f"[red]LegacyPhotos:[/red] {exc}"
+        )
+
+        return 1
+
+    except Exception as exc:
+        console.print()
+        console.print(
+            f"[red]LegacyPhotos:[/red] {exc}"
+        )
+
+        return 1
+
+    finally:
+        try:
+            history.close()
+        except Exception:
+            pass
+
+    new_assets = [
+        asset
+        for asset in assets
+        if asset.get("uuid")
+        not in known
+    ]
+
+    filtered = sum(
+        1
+        for asset in new_assets
+        if asset.get("has_adjustments")
+    )
+
+    unfiltered = (
+        len(new_assets)
+        - filtered
+    )
+
+    console.print()
+
+    lines = [
+        "[green]✓ iPhone 4S[/green]",
+        (
+            f"iOS {device.product_version} · "
+            f"Build {device.build_version}"
+        ),
+        "",
+        (
+            f"Photos on camera:       "
+            f"{len(assets)}"
+        ),
+        (
+            f"Previously imported:   "
+            f"{len(known)}"
+        ),
+        "",
+    ]
+
+    if new_assets:
+        lines.extend(
+            [
+                (
+                    f"[bold]{len(new_assets)} "
+                    "new photos[/bold]"
+                ),
+                "",
+                (
+                    f"Filtered:             "
+                    f"{filtered}"
+                ),
+                (
+                    f"Unfiltered:           "
+                    f"{unfiltered}"
+                ),
+            ]
+        )
+
+    else:
+        lines.extend(
+            [
+                "[green][bold]"
+                "No new photos."
+                "[/bold][/green]",
+                "",
+                "Everything is up to date.",
+            ]
+        )
+
+    console.print(
+        Panel(
+            "\n".join(lines),
+            title="LegacyPhotos",
+        )
+    )
+
+    if new_assets:
+        console.print()
+        console.print(
+            "[bold]Newest captures[/bold]"
+        )
+
+        for asset in new_assets[-10:]:
+            state = (
+                "filtered"
+                if asset.get(
+                    "has_adjustments"
+                )
+                else "original"
+            )
+
+            console.print(
+                f"  "
+                f"{asset['filename']:<14} "
+                f"[dim]{state}[/dim]"
+            )
+
+        console.print()
+        console.print(
+            "[yellow]"
+            "Importing these photos is "
+            "not enabled in the single-command "
+            "workflow yet."
+            "[/yellow]"
+        )
+
+    return 0
 
 def main():
     parser = argparse.ArgumentParser(
@@ -192,6 +351,13 @@ def main():
             "photo library."
         ),
     )
+    subparsers.add_parser(
+    "sync",
+    help=(
+        "Check the iPhone for "
+        "new photos."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -200,6 +366,9 @@ def main():
 
     if args.command == "scan":
         return scan_command()
+    
+    if args.command == "sync":
+        return sync_command()
 
     return 1
 
