@@ -12,16 +12,22 @@ from device import (
     require_supported_device,
 )
 
+from photos_db import (
+    PhotosDatabaseError,
+    camera_library_summary,
+    prepare_snapshot,
+)
+
 
 console = Console()
 
 
-def status_command():
+def get_supported_device():
     try:
         with console.status(
             "[bold]Looking for iPhone 4S..."
         ):
-            device = require_supported_device()
+            return require_supported_device()
 
     except UnsupportedDeviceError as exc:
         console.print()
@@ -33,7 +39,7 @@ def status_command():
             )
         )
 
-        return 1
+        return None
 
     except DeviceError as exc:
         console.print()
@@ -41,6 +47,13 @@ def status_command():
             f"[red]LegacyPhotos:[/red] {exc}"
         )
 
+        return None
+
+
+def status_command():
+    device = get_supported_device()
+
+    if device is None:
         return 1
 
     console.print()
@@ -66,6 +79,90 @@ def status_command():
     return 0
 
 
+def scan_command():
+    device = get_supported_device()
+
+    if device is None:
+        return 1
+
+    try:
+        with console.status(
+            "[bold]Reading iPhone photo library..."
+        ):
+            snapshot, fetched = (
+                prepare_snapshot()
+            )
+
+            summary = (
+                camera_library_summary(
+                    snapshot
+                )
+            )
+
+    except PhotosDatabaseError as exc:
+        console.print()
+        console.print(
+            f"[red]LegacyPhotos:[/red] {exc}"
+        )
+
+        return 1
+
+    console.print()
+
+    lines = [
+        "[green]✓ iPhone 4S detected[/green]",
+        f"iOS {device.product_version} · "
+        f"Build {device.build_version}",
+        "",
+        (
+            f"[bold]{summary['camera_photos']}[/bold] "
+            "camera photos"
+        ),
+        (
+            f"{summary['adjusted']} "
+            "camera-adjustment records"
+        ),
+        (
+            f"{summary['unadjusted']} "
+            "without adjustments"
+        ),
+        "",
+        (
+            "Photos.sqlite: "
+            "[green]✓[/green]"
+        ),
+        (
+            "WAL: "
+            + (
+                "[green]✓[/green]"
+                if fetched.get(
+                    "Photos.sqlite-wal"
+                )
+                else "[dim]not present[/dim]"
+            )
+        ),
+        (
+            "SHM: "
+            + (
+                "[green]✓[/green]"
+                if fetched.get(
+                    "Photos.sqlite-shm"
+                )
+                else "[dim]not present[/dim]"
+            )
+        ),
+    ]
+
+    console.print(
+        Panel(
+            "\n".join(lines),
+            title="LegacyPhotos",
+        )
+    )
+
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="legacyphotos",
@@ -82,13 +179,27 @@ def main():
 
     subparsers.add_parser(
         "status",
-        help="Detect and verify the connected iPhone 4S.",
+        help=(
+            "Detect and verify the connected "
+            "iPhone 4S."
+        ),
+    )
+
+    subparsers.add_parser(
+        "scan",
+        help=(
+            "Read the current iPhone 4S "
+            "photo library."
+        ),
     )
 
     args = parser.parse_args()
 
     if args.command == "status":
         return status_command()
+
+    if args.command == "scan":
+        return scan_command()
 
     return 1
 
